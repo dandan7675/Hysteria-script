@@ -1,5 +1,10 @@
 #!/bin/bash
 
+RED="\033[31m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+PLAIN='\033[0m'
+
 red(){
     echo -e "\033[31m\033[01m$1\033[0m"
 }
@@ -11,11 +16,6 @@ green(){
 yellow(){
     echo -e "\033[33m\033[01m$1\033[0m"
 }
-
-RED="\033[31m"
-GREEN="\033[32m"
-YELLOW="\033[33m"
-PLAIN='\033[0m'
 
 # 判断系统及定义系统安装依赖方式
 REGEX=("debian" "ubuntu" "centos|red hat|kernel|oracle linux|alma|rocky" "'amazon linux'")
@@ -60,7 +60,7 @@ check_tun(){
 checkCentOS8(){
     if [[ -n $(cat /etc/os-release | grep "CentOS Linux 8") ]]; then
         yellow "检测到当前VPS系统为CentOS 8，是否升级为CentOS Stream 8以确保软件包正常安装？"
-        read -p "请输入选项 [y/n]：" comfirmCentOSStream
+        read -rp "请输入选项 [y/n]：" comfirmCentOSStream
         if [[ $comfirmCentOSStream == "y" ]]; then
             yellow "正在为你升级到CentOS Stream 8，大概需要10-30分钟的时间"
             sleep 1
@@ -98,13 +98,14 @@ downloadHysteria() {
     rm -f /usr/bin/hysteria
     rm -rf /root/Hysteria
     mkdir /root/Hysteria
-    last_version=$(curl -Ls "https://api.github.com/repos/HyNetwork/Hysteria/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    ## last_version=$(curl -Ls "https://api.github.com/repos/HyNetwork/Hysteria/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    last_version=$(curl -Ls "https://data.jsdelivr.com/v1/package/resolve/gh/HyNetwork/Hysteria" | grep '"version":' | sed -E 's/.*"([^"]+)".*/\1/')
     if [[ ! -n "$last_version" ]]; then
-        red "检测 Hysteria 版本失败，可能是超出 Github API 限制，请稍后再试"
+        red "检测 Hysteria 版本失败，可能是网络错误，请稍后再试"
         exit 1
     fi
     yellow "检测到 Hysteria 最新版本：${last_version}，开始安装"
-    wget -N --no-check-certificate https://github.com/HyNetwork/Hysteria/releases/download/${last_version}/Hysteria-tun-linux-$(archAffix) -O /usr/bin/hysteria
+    wget -N --no-check-certificate https://github.com/HyNetwork/Hysteria/releases/download/v${last_version}/Hysteria-tun-linux-$(archAffix) -O /usr/bin/hysteria
     if [[ $? -ne 0 ]]; then
         red "下载 Hysteria 失败，请确保你的服务器能够连接并下载 Github 的文件"
         exit 1
@@ -113,9 +114,17 @@ downloadHysteria() {
 }
 
 makeConfig() {
-    read -p "请输入 Hysteria 的连接端口（默认：40000）：" PORT
+    read -rp "请输入 Hysteria 的连接端口（默认：40000）：" PORT
     [[ -z $PORT ]] && PORT=40000
-    read -p "请输入 Hysteria 的连接混淆密码（默认随机生成）：" OBFS
+    if [[ -n $(netstat -ntlp | grep "$PORT") ]]; then
+        until [[ -z $(netstat -ntlp | grep "$PORT") ]]; do
+            if [[ -n $(netstat -ntlp | grep "$PORT") ]]; then
+                yellow "你设置的端口目前已被占用，请重新输入端口"
+                read -rp "请输入 Hysteria 的连接端口（默认：40000）：" PORT
+            fi
+        done
+    fi
+    read -rp "请输入 Hysteria 的连接混淆密码（默认随机生成）：" OBFS
     [[ -z $OBFS ]] && OBFS=$(date +%s%N | md5sum | cut -c 1-32)
     sysctl -w net.core.rmem_max=4000000
     ulimit -n 1048576 && ulimit -u unlimited
@@ -220,7 +229,7 @@ installHysteria() {
     checkCentOS8
     install_base
     downloadHysteria
-    read -p "是否安装BBR（y/n，默认n）：" INSTALL_BBR_YN
+    read -rp "是否安装BBR（y/n，默认n）：" INSTALL_BBR_YN
     if [[ $INSTALL_BBR_YN =~ "y"|"Y" ]]; then
         installBBR
     fi
@@ -293,7 +302,7 @@ open_ports() {
     iptables -F 2>/dev/null
     iptables -X 2>/dev/null
     netfilter-persistent save 2>/dev/null
-    green "放开防火墙端口成功！"
+    green "放开VPS网络防火墙端口成功！"
 }
 
 #禁用IPv6
@@ -342,16 +351,17 @@ show_usage(){
 menu() {
     clear
     check_status
-
     echo "#############################################################"
-    echo -e "#                 ${RED} Hysteria  一键安装脚本${PLAIN}                   #"
+    echo -e "#                   ${RED}Hysteria  一键安装脚本${PLAIN}                  #"
     echo -e "# ${GREEN}作者${PLAIN}: Misaka No                                           #"
-    echo -e "# ${GREEN}网址${PLAIN}: https://owo.misaka.rest                             #"
+    echo -e "# ${GREEN}博客${PLAIN}: https://owo.misaka.rest                             #"
     echo -e "# ${GREEN}论坛${PLAIN}: https://vpsgo.co                                    #"
     echo -e "# ${GREEN}TG群${PLAIN}: https://t.me/misakanetcn                            #"
+    echo -e "# ${GREEN}GitHub${PLAIN}: https://github.com/Misaka-blog                    #"
+    echo -e "# ${GREEN}Bitbucket${PLAIN}: https://bitbucket.org/misakano7545             #"
+    echo -e "# ${GREEN}GitLab${PLAIN}: https://gitlab.com/misaka-blog                    #"
     echo "#############################################################"
     echo ""
-
     echo -e "  ${GREEN}1.${PLAIN}  安装Hysieria "
     echo -e "  ${GREEN}2.  ${RED}卸载Hysieria ${PLAIN}"
     echo " -------------"
@@ -368,7 +378,7 @@ menu() {
     echo ""
     echo -e "Hysteria 状态：$status"
     echo ""
-    read -p " 请选择操作[0-9]：" answer
+    read -rp " 请选择操作[0-9]：" answer
     case $answer in
         1) installHysteria ;;
         2) uninstall ;;
